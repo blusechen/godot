@@ -110,7 +110,7 @@ void CameraServer::add_feed(const Ref<CameraFeed> &p_feed) {
 #endif
 
 	// let whomever is interested know
-	emit_signal("camera_feed_added", p_feed->get_id());
+	emit_signal(SNAME("camera_feed_added"), p_feed->get_id());
 };
 
 void CameraServer::remove_feed(const Ref<CameraFeed> &p_feed) {
@@ -124,10 +124,10 @@ void CameraServer::remove_feed(const Ref<CameraFeed> &p_feed) {
 #endif
 
 			// remove it from our array, if this results in our feed being unreferenced it will be destroyed
-			feeds.remove(i);
+			feeds.remove_at(i);
 
 			// let whomever is interested know
-			emit_signal("camera_feed_removed", feed_id);
+			emit_signal(SNAME("camera_feed_removed"), feed_id);
 			return;
 		};
 	};

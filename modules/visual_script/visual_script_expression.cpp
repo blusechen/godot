@@ -136,7 +136,7 @@ void VisualScriptExpression::_get_property_list(List<PropertyInfo> *p_list) cons
 		argt += "," + Variant::get_type_name(Variant::Type(i));
 	}
 
-	p_list->push_back(PropertyInfo(Variant::STRING, "expression", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NOEDITOR));
+	p_list->push_back(PropertyInfo(Variant::STRING, "expression", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR));
 	p_list->push_back(PropertyInfo(Variant::INT, "out_type", PROPERTY_HINT_ENUM, argt));
 	p_list->push_back(PropertyInfo(Variant::INT, "input_count", PROPERTY_HINT_RANGE, "0,64,1"));
 	p_list->push_back(PropertyInfo(Variant::BOOL, "sequenced"));
@@ -526,10 +526,10 @@ Error VisualScriptExpression::_get_token(Token &r_token) {
 						r_token.value = Math_TAU;
 					} else if (id == "INF") {
 						r_token.type = TK_CONSTANT;
-						r_token.value = Math_INF;
+						r_token.value = INFINITY;
 					} else if (id == "NAN") {
 						r_token.type = TK_CONSTANT;
-						r_token.value = Math_NAN;
+						r_token.value = NAN;
 					} else if (id == "not") {
 						r_token.type = TK_OP_NOT;
 					} else if (id == "or") {
@@ -1190,7 +1190,7 @@ VisualScriptExpression::ENode *VisualScriptExpression::_parse_expression() {
 				op->nodes[1] = nullptr;
 				expression.write[i].is_op = false;
 				expression.write[i].node = op;
-				expression.remove(i + 1);
+				expression.remove_at(i + 1);
 			}
 
 		} else {
@@ -1222,8 +1222,8 @@ VisualScriptExpression::ENode *VisualScriptExpression::_parse_expression() {
 
 			//replace all 3 nodes by this operator and make it an expression
 			expression.write[next_op - 1].node = op;
-			expression.remove(next_op);
-			expression.remove(next_op);
+			expression.remove_at(next_op);
+			expression.remove_at(next_op);
 		}
 	}
 
@@ -1498,7 +1498,7 @@ public:
 	}
 };
 
-VisualScriptNodeInstance *VisualScriptExpression::instance(VisualScriptInstance *p_instance) {
+VisualScriptNodeInstance *VisualScriptExpression::instantiate(VisualScriptInstance *p_instance) {
 	_compile_expression();
 	VisualScriptNodeInstanceExpression *instance = memnew(VisualScriptNodeInstanceExpression);
 	instance->instance = p_instance;

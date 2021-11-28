@@ -28,12 +28,13 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
 /*************************************************************************/
 
-#ifndef VISUALSERVERVIEWPORT_H
-#define VISUALSERVERVIEWPORT_H
+#ifndef RENDERER_VIEWPORT_H
+#define RENDERER_VIEWPORT_H
 
 #include "core/templates/local_vector.h"
 #include "core/templates/rid_owner.h"
 #include "core/templates/self_list.h"
+#include "servers/rendering/renderer_scene.h"
 #include "servers/rendering_server.h"
 #include "servers/xr/xr_interface.h"
 
@@ -48,10 +49,16 @@ public:
 
 		bool use_xr; /* use xr interface to override camera positioning and projection matrices and control output */
 
+		Size2i internal_size;
 		Size2i size;
 		RID camera;
 		RID scenario;
 
+		RS::ViewportScaling3DMode scaling_3d_mode;
+		float scaling_3d_scale = 1.0;
+		float fsr_sharpness = 0.2f;
+		float fsr_mipmap_bias = 0.0f;
+		bool fsr_enabled;
 		RS::ViewportUpdateMode update_mode;
 		RID render_target;
 		RID render_target_texture;
@@ -68,9 +75,9 @@ public:
 		Rect2 viewport_to_screen_rect;
 		bool viewport_render_direct_to_screen;
 
-		bool hide_scenario;
-		bool hide_canvas;
-		bool disable_environment;
+		bool disable_2d = false;
+		bool disable_environment = false;
+		bool disable_3d = false;
 		bool measure_render_time;
 
 		bool snap_2d_transforms_to_pixel;
@@ -92,7 +99,6 @@ public:
 
 		uint64_t last_pass = 0;
 
-		int render_info[RS::VIEWPORT_RENDER_INFO_MAX];
 		RS::ViewportDebugDraw debug_draw;
 
 		RS::ViewportClearMode clear_mode;
@@ -133,11 +139,13 @@ public:
 
 		Map<RID, CanvasData> canvas_map;
 
+		RendererScene::RenderInfo render_info;
+
 		Viewport() {
 			update_mode = RS::VIEWPORT_UPDATE_WHEN_VISIBLE;
 			clear_mode = RS::VIEWPORT_CLEAR_ALWAYS;
 			transparent_bg = false;
-			disable_environment = false;
+
 			viewport_to_screen = DisplayServer::INVALID_WINDOW_ID;
 			shadow_atlas_size = 0;
 			measure_render_time = false;
@@ -152,9 +160,6 @@ public:
 			snap_2d_transforms_to_pixel = false;
 			snap_2d_vertices_to_pixel = false;
 
-			for (int i = 0; i < RS::VIEWPORT_RENDER_INFO_MAX; i++) {
-				render_info[i] = 0;
-			}
 			use_xr = false;
 			sdf_active = false;
 
@@ -164,13 +169,15 @@ public:
 			time_gpu_begin = 0;
 			time_gpu_end = 0;
 		}
+
+		uint32_t get_view_count();
 	};
 
 	HashMap<String, RID> timestamp_vp_map;
 
 	uint64_t draw_viewports_pass = 0;
 
-	mutable RID_PtrOwner<Viewport, true> viewport_owner;
+	mutable RID_Owner<Viewport, true> viewport_owner;
 
 	struct ViewportSort {
 		_FORCE_INLINE_ bool operator()(const Viewport *p_left, const Viewport *p_right) const {
@@ -186,9 +193,14 @@ public:
 
 	Vector<Viewport *> active_viewports;
 
+	int total_objects_drawn = 0;
+	int total_vertices_drawn = 0;
+	int total_draw_calls_used = 0;
+
 private:
-	void _draw_3d(Viewport *p_viewport, XRInterface::Eyes p_eye);
-	void _draw_viewport(Viewport *p_viewport, XRInterface::Eyes p_eye = XRInterface::EYE_MONO);
+	void _configure_3d_render_buffers(Viewport *p_viewport);
+	void _draw_3d(Viewport *p_viewport);
+	void _draw_viewport(Viewport *p_viewport);
 
 	int occlusion_rays_per_thread = 512;
 
@@ -207,6 +219,12 @@ public:
 
 	void viewport_set_active(RID p_viewport, bool p_active);
 	void viewport_set_parent_viewport(RID p_viewport, RID p_parent_viewport);
+
+	void viewport_set_scaling_3d_mode(RID p_viewport, RS::ViewportScaling3DMode p_mode);
+	void viewport_set_scaling_3d_scale(RID p_viewport, float p_scaling_3d_scale);
+	void viewport_set_fsr_sharpness(RID p_viewport, float p_sharpness);
+	void viewport_set_fsr_mipmap_bias(RID p_viewport, float p_mipmap_bias);
+
 	void viewport_set_update_mode(RID p_viewport, RS::ViewportUpdateMode p_mode);
 	void viewport_set_vflip(RID p_viewport, bool p_enable);
 
@@ -215,9 +233,9 @@ public:
 	RID viewport_get_texture(RID p_viewport) const;
 	RID viewport_get_occluder_debug_texture(RID p_viewport) const;
 
-	void viewport_set_hide_scenario(RID p_viewport, bool p_hide);
-	void viewport_set_hide_canvas(RID p_viewport, bool p_hide);
+	void viewport_set_disable_2d(RID p_viewport, bool p_disable);
 	void viewport_set_disable_environment(RID p_viewport, bool p_disable);
+	void viewport_set_disable_3d(RID p_viewport, bool p_disable);
 
 	void viewport_attach_camera(RID p_viewport, RID p_camera);
 	void viewport_set_scenario(RID p_viewport, RID p_scenario);
@@ -240,7 +258,7 @@ public:
 	void viewport_set_occlusion_culling_build_quality(RS::ViewportOcclusionCullingBuildQuality p_quality);
 	void viewport_set_lod_threshold(RID p_viewport, float p_pixels);
 
-	virtual int viewport_get_render_info(RID p_viewport, RS::ViewportRenderInfo p_info);
+	virtual int viewport_get_render_info(RID p_viewport, RS::ViewportRenderInfoType p_type, RS::ViewportRenderInfo p_info);
 	virtual void viewport_set_debug_draw(RID p_viewport, RS::ViewportDebugDraw p_draw);
 
 	void viewport_set_measure_render_time(RID p_viewport, bool p_enable);
@@ -262,11 +280,15 @@ public:
 
 	bool free(RID p_rid);
 
-	//workaround for setting this on thread
-	void call_set_use_vsync(bool p_enable);
+	int get_total_objects_drawn() const;
+	int get_total_vertices_drawn() const;
+	int get_total_draw_calls_used() const;
+
+	// Workaround for setting this on thread.
+	void call_set_vsync_mode(DisplayServer::VSyncMode p_mode, DisplayServer::WindowID p_window);
 
 	RendererViewport();
 	virtual ~RendererViewport() {}
 };
 
-#endif // VISUALSERVERVIEWPORT_H
+#endif // RENDERER_VIEWPORT_H

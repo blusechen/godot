@@ -30,7 +30,6 @@
 
 #include "navigation_agent_3d.h"
 
-#include "core/config/engine.h"
 #include "servers/navigation_server_3d.h"
 
 void NavigationAgent3D::_bind_methods() {
@@ -193,7 +192,7 @@ Vector3 NavigationAgent3D::get_target_location() const {
 Vector3 NavigationAgent3D::get_next_location() {
 	update_navigation();
 	if (navigation_path.size() == 0) {
-		ERR_FAIL_COND_V(agent_parent == nullptr, Vector3());
+		ERR_FAIL_COND_V_MSG(agent_parent == nullptr, Vector3(), "The agent has no parent.");
 		return agent_parent->get_global_transform().origin;
 	} else {
 		return navigation_path[nav_path_index] - Vector3(0, navigation_height_offset, 0);
@@ -201,7 +200,7 @@ Vector3 NavigationAgent3D::get_next_location() {
 }
 
 real_t NavigationAgent3D::distance_to_target() const {
-	ERR_FAIL_COND_V(agent_parent == nullptr, 0.0);
+	ERR_FAIL_COND_V_MSG(agent_parent == nullptr, 0.0, "The agent has no parent.");
 	return agent_parent->get_global_transform().origin.distance_to(target_location);
 }
 
@@ -242,7 +241,7 @@ void NavigationAgent3D::_avoidance_done(Vector3 p_new_velocity) {
 	}
 	velocity_submitted = false;
 
-	emit_signal("velocity_computed", p_new_velocity);
+	emit_signal(SNAME("velocity_computed"), p_new_velocity);
 }
 
 TypedArray<String> NavigationAgent3D::get_configuration_warnings() const {
@@ -296,7 +295,7 @@ void NavigationAgent3D::update_navigation() {
 		navigation_path = NavigationServer3D::get_singleton()->map_get_path(agent_parent->get_world_3d()->get_navigation_map(), o, target_location, true);
 		navigation_finished = false;
 		nav_path_index = 0;
-		emit_signal("path_changed");
+		emit_signal(SNAME("path_changed"));
 	}
 
 	if (navigation_path.size() == 0) {
@@ -312,7 +311,7 @@ void NavigationAgent3D::update_navigation() {
 				_check_distance_to_target();
 				nav_path_index -= 1;
 				navigation_finished = true;
-				emit_signal("navigation_finished");
+				emit_signal(SNAME("navigation_finished"));
 				break;
 			}
 		}
@@ -322,7 +321,7 @@ void NavigationAgent3D::update_navigation() {
 void NavigationAgent3D::_check_distance_to_target() {
 	if (!target_reached) {
 		if (distance_to_target() < target_desired_distance) {
-			emit_signal("target_reached");
+			emit_signal(SNAME("target_reached"));
 			target_reached = true;
 		}
 	}

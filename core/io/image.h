@@ -41,7 +41,7 @@
  * Image storage class. This is used to store an image in user memory, as well as
  * providing some basic methods for image manipulation.
  * Images can be loaded from a file, or registered into the Render object as textures.
-*/
+ */
 
 class Image;
 
@@ -148,10 +148,11 @@ public:
 	static void (*_image_decompress_etc1)(Image *);
 	static void (*_image_decompress_etc2)(Image *);
 
-	static Vector<uint8_t> (*lossy_packer)(const Ref<Image> &p_image, float p_quality);
-	static Ref<Image> (*lossy_unpacker)(const Vector<uint8_t> &p_buffer);
-	static Vector<uint8_t> (*lossless_packer)(const Ref<Image> &p_image);
-	static Ref<Image> (*lossless_unpacker)(const Vector<uint8_t> &p_buffer);
+	static Vector<uint8_t> (*webp_lossy_packer)(const Ref<Image> &p_image, float p_quality);
+	static Vector<uint8_t> (*webp_lossless_packer)(const Ref<Image> &p_image);
+	static Ref<Image> (*webp_unpacker)(const Vector<uint8_t> &p_buffer);
+	static Vector<uint8_t> (*png_packer)(const Ref<Image> &p_image);
+	static Ref<Image> (*png_unpacker)(const Vector<uint8_t> &p_buffer);
 	static Vector<uint8_t> (*basis_universal_packer)(const Ref<Image> &p_image, UsedChannels p_channels);
 	static Ref<Image> (*basis_universal_unpacker)(const Vector<uint8_t> &p_buffer);
 
@@ -189,8 +190,10 @@ private:
 	static int _get_dst_image_size(int p_width, int p_height, Format p_format, int &r_mipmaps, int p_mipmaps = -1, int *r_mm_width = nullptr, int *r_mm_height = nullptr);
 	bool _can_modify(Format p_format) const;
 
-	_FORCE_INLINE_ void _put_pixelb(int p_x, int p_y, uint32_t p_pixelsize, uint8_t *p_data, const uint8_t *p_pixel);
-	_FORCE_INLINE_ void _get_pixelb(int p_x, int p_y, uint32_t p_pixelsize, const uint8_t *p_data, uint8_t *p_pixel);
+	_FORCE_INLINE_ void _put_pixelb(int p_x, int p_y, uint32_t p_pixel_size, uint8_t *p_data, const uint8_t *p_pixel);
+	_FORCE_INLINE_ void _get_pixelb(int p_x, int p_y, uint32_t p_pixel_size, const uint8_t *p_data, uint8_t *p_pixel);
+
+	_FORCE_INLINE_ void _repeat_pixel_over_subsequent_memory(uint8_t *p_pixel, int p_pixel_size, int p_count);
 
 	void _set_data(const Dictionary &p_data);
 	Dictionary _get_data() const;
@@ -335,11 +338,13 @@ public:
 		COMPRESS_ETC,
 		COMPRESS_ETC2,
 		COMPRESS_BPTC,
+		COMPRESS_MAX,
 	};
 	enum CompressSource {
 		COMPRESS_SOURCE_GENERIC,
 		COMPRESS_SOURCE_SRGB,
-		COMPRESS_SOURCE_NORMAL
+		COMPRESS_SOURCE_NORMAL,
+		COMPRESS_SOURCE_MAX,
 	};
 
 	Error compress(CompressMode p_mode, CompressSource p_source = COMPRESS_SOURCE_GENERIC, float p_lossy_quality = 0.7);
@@ -359,7 +364,8 @@ public:
 	void blit_rect_mask(const Ref<Image> &p_src, const Ref<Image> &p_mask, const Rect2 &p_src_rect, const Point2 &p_dest);
 	void blend_rect(const Ref<Image> &p_src, const Rect2 &p_src_rect, const Point2 &p_dest);
 	void blend_rect_mask(const Ref<Image> &p_src, const Ref<Image> &p_mask, const Rect2 &p_src_rect, const Point2 &p_dest);
-	void fill(const Color &c);
+	void fill(const Color &p_color);
+	void fill_rect(const Rect2 &p_rect, const Color &p_color);
 
 	Rect2 get_used_rect() const;
 	Ref<Image> get_rect(const Rect2 &p_area) const;

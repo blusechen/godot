@@ -81,7 +81,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <memory>
 
 #include "core/math/color.h"
-#include "core/math/transform.h"
+#include "core/math/transform_3d.h"
 #include "core/math/vector2.h"
 #include "core/math/vector3.h"
 
@@ -187,7 +187,7 @@ private:
 class Parser {
 public:
 	/** Parse given a token list. Does not take ownership of the tokens -
-     *  the objects must persist during the entire parser lifetime */
+	 *  the objects must persist during the entire parser lifetime */
 	Parser(const TokenList &tokens, bool is_binary);
 	~Parser();
 
@@ -264,7 +264,7 @@ TokenPtr GetRequiredToken(const ElementPtr el, unsigned int index);
 
 // ------------------------------------------------------------------------------------------------
 // read a 4x4 matrix from an array of 16 floats
-Transform ReadMatrix(const ElementPtr element);
+Transform3D ReadMatrix(const ElementPtr element);
 } // namespace FBXDocParser
 
 #endif // FBX_PARSER_H

@@ -86,20 +86,14 @@ SaveEXRFunc Image::save_exr_func = nullptr;
 
 SavePNGBufferFunc Image::save_png_buffer_func = nullptr;
 
-void Image::_put_pixelb(int p_x, int p_y, uint32_t p_pixelsize, uint8_t *p_data, const uint8_t *p_pixel) {
-	uint32_t ofs = (p_y * width + p_x) * p_pixelsize;
-
-	for (uint32_t i = 0; i < p_pixelsize; i++) {
-		p_data[ofs + i] = p_pixel[i];
-	}
+void Image::_put_pixelb(int p_x, int p_y, uint32_t p_pixel_size, uint8_t *p_data, const uint8_t *p_pixel) {
+	uint32_t ofs = (p_y * width + p_x) * p_pixel_size;
+	memcpy(p_data + ofs, p_pixel, p_pixel_size);
 }
 
-void Image::_get_pixelb(int p_x, int p_y, uint32_t p_pixelsize, const uint8_t *p_data, uint8_t *p_pixel) {
-	uint32_t ofs = (p_y * width + p_x) * p_pixelsize;
-
-	for (uint32_t i = 0; i < p_pixelsize; i++) {
-		p_pixel[i] = p_data[ofs + i];
-	}
+void Image::_get_pixelb(int p_x, int p_y, uint32_t p_pixel_size, const uint8_t *p_data, uint8_t *p_pixel) {
+	uint32_t ofs = (p_y * width + p_x) * p_pixel_size;
+	memcpy(p_pixel, p_data + ofs, p_pixel_size);
 }
 
 int Image::get_format_pixel_size(Format p_format) {
@@ -797,7 +791,7 @@ static void _scale_bilinear(const uint8_t *__restrict p_src, uint8_t *__restrict
 					uint32_t interp_down = p01 + (((p11 - p01) * src_xofs_frac) >> FRAC_BITS);
 					uint32_t interp = interp_up + (((interp_down - interp_up) * src_yofs_frac) >> FRAC_BITS);
 					interp >>= FRAC_BITS;
-					p_dst[i * p_dst_width * CC + j * CC + l] = interp;
+					p_dst[i * p_dst_width * CC + j * CC + l] = uint8_t(interp);
 				} else if (sizeof(T) == 2) { //half float
 
 					float xofs_frac = float(src_xofs_frac) / (1 << FRAC_BITS);
@@ -1428,16 +1422,23 @@ void Image::flip_x() {
 	}
 }
 
+/// Get mipmap size and offset.
 int Image::_get_dst_image_size(int p_width, int p_height, Format p_format, int &r_mipmaps, int p_mipmaps, int *r_mm_width, int *r_mm_height) {
+	// Data offset in mipmaps (including the original texture).
 	int size = 0;
+
 	int w = p_width;
 	int h = p_height;
+
+	// Current mipmap index in the loop below. p_mipmaps is the target mipmap index.
+	// In this function, mipmap 0 represents the first mipmap instead of the original texture.
 	int mm = 0;
 
 	int pixsize = get_format_pixel_size(p_format);
 	int pixshift = get_format_pixel_rshift(p_format);
 	int block = get_format_block_size(p_format);
-	//technically, you can still compress up to 1 px no matter the format, so commenting this
+
+	// Technically, you can still compress up to 1 px no matter the format, so commenting this.
 	//int minw, minh;
 	//get_format_min_pixel_size(p_format, minw, minh);
 	int minw = 1, minh = 1;
@@ -1453,17 +1454,6 @@ int Image::_get_dst_image_size(int p_width, int p_height, Format p_format, int &
 
 		size += s;
 
-		if (r_mm_width) {
-			*r_mm_width = bw;
-		}
-		if (r_mm_height) {
-			*r_mm_height = bh;
-		}
-
-		if (p_mipmaps >= 0 && mm == p_mipmaps) {
-			break;
-		}
-
 		if (p_mipmaps >= 0) {
 			w = MAX(minw, w >> 1);
 			h = MAX(minh, h >> 1);
@@ -1474,6 +1464,21 @@ int Image::_get_dst_image_size(int p_width, int p_height, Format p_format, int &
 			w = MAX(minw, w >> 1);
 			h = MAX(minh, h >> 1);
 		}
+
+		// Set mipmap size.
+		// It might be necessary to put this after the minimum mipmap size check because of the possible occurrence of "1 >> 1".
+		if (r_mm_width) {
+			*r_mm_width = bw >> 1;
+		}
+		if (r_mm_height) {
+			*r_mm_height = bh >> 1;
+		}
+
+		// Reach target mipmap.
+		if (p_mipmaps >= 0 && mm == p_mipmaps) {
+			break;
+		}
+
 		mm++;
 	}
 
@@ -1934,7 +1939,7 @@ Error Image::generate_mipmap_roughness(RoughnessChannel p_roughness_channel, con
 			memcpy(wr.ptr(), ptr, size);
 			wr = uint8_t*();
 			Ref<Image> im;
-			im.instance();
+			im.instantiate();
 			im->create(w, h, false, format, imgdata);
 			im->save_png("res://mipmap_" + itos(i) + ".png");
 		}
@@ -1974,6 +1979,7 @@ void Image::create(int p_width, int p_height, bool p_use_mipmaps, Format p_forma
 	ERR_FAIL_COND_MSG(p_width > MAX_WIDTH, "Image width cannot be greater than " + itos(MAX_WIDTH) + ".");
 	ERR_FAIL_COND_MSG(p_height > MAX_HEIGHT, "Image height cannot be greater than " + itos(MAX_HEIGHT) + ".");
 	ERR_FAIL_COND_MSG(p_width * p_height > MAX_PIXELS, "Too many pixels for image, maximum is " + itos(MAX_PIXELS));
+	ERR_FAIL_INDEX_MSG(p_format, FORMAT_MAX, "Image format out of range, please see Image's Format enum.");
 
 	int mm = 0;
 	int size = _get_dst_image_size(p_width, p_height, p_format, mm, p_use_mipmaps ? -1 : 0);
@@ -1996,6 +2002,7 @@ void Image::create(int p_width, int p_height, bool p_use_mipmaps, Format p_forma
 	ERR_FAIL_COND_MSG(p_width > MAX_WIDTH, "Image width cannot be greater than " + itos(MAX_WIDTH) + ".");
 	ERR_FAIL_COND_MSG(p_height > MAX_HEIGHT, "Image height cannot be greater than " + itos(MAX_HEIGHT) + ".");
 	ERR_FAIL_COND_MSG(p_width * p_height > MAX_PIXELS, "Too many pixels for image, maximum is " + itos(MAX_PIXELS));
+	ERR_FAIL_INDEX_MSG(p_format, FORMAT_MAX, "Image format out of range, please see Image's Format enum.");
 
 	int mm;
 	int size = _get_dst_image_size(p_width, p_height, p_format, mm, p_use_mipmaps ? -1 : 0);
@@ -2367,6 +2374,8 @@ Error Image::decompress() {
 }
 
 Error Image::compress(CompressMode p_mode, CompressSource p_source, float p_lossy_quality) {
+	ERR_FAIL_INDEX_V_MSG(p_mode, COMPRESS_MAX, ERR_INVALID_PARAMETER, "Invalid compress mode.");
+	ERR_FAIL_INDEX_V_MSG(p_source, COMPRESS_SOURCE_MAX, ERR_INVALID_PARAMETER, "Invalid compress source.");
 	return compress_from_channels(p_mode, detect_used_channels(p_source), p_lossy_quality);
 }
 
@@ -2391,6 +2400,9 @@ Error Image::compress_from_channels(CompressMode p_mode, UsedChannels p_channels
 		case COMPRESS_BPTC: {
 			ERR_FAIL_COND_V(!_image_compress_bptc_func, ERR_UNAVAILABLE);
 			_image_compress_bptc_func(this, p_lossy_quality, p_channels);
+		} break;
+		case COMPRESS_MAX: {
+			ERR_FAIL_V(ERR_INVALID_PARAMETER);
 		} break;
 	}
 
@@ -2488,7 +2500,7 @@ void Image::blit_rect(const Ref<Image> &p_src, const Rect2 &p_src_rect, const Po
 		clipped_src_rect.position.y = ABS(p_dest.y);
 	}
 
-	if (clipped_src_rect.size.x <= 0 || clipped_src_rect.size.y <= 0) {
+	if (clipped_src_rect.has_no_area()) {
 		return;
 	}
 
@@ -2543,7 +2555,7 @@ void Image::blit_rect_mask(const Ref<Image> &p_src, const Ref<Image> &p_mask, co
 		clipped_src_rect.position.y = ABS(p_dest.y);
 	}
 
-	if (clipped_src_rect.size.x <= 0 || clipped_src_rect.size.y <= 0) {
+	if (clipped_src_rect.has_no_area()) {
 		return;
 	}
 
@@ -2597,7 +2609,7 @@ void Image::blend_rect(const Ref<Image> &p_src, const Rect2 &p_src_rect, const P
 		clipped_src_rect.position.y = ABS(p_dest.y);
 	}
 
-	if (clipped_src_rect.size.x <= 0 || clipped_src_rect.size.y <= 0) {
+	if (clipped_src_rect.has_no_area()) {
 		return;
 	}
 
@@ -2646,7 +2658,7 @@ void Image::blend_rect_mask(const Ref<Image> &p_src, const Ref<Image> &p_mask, c
 		clipped_src_rect.position.y = ABS(p_dest.y);
 	}
 
-	if (clipped_src_rect.size.x <= 0 || clipped_src_rect.size.y <= 0) {
+	if (clipped_src_rect.has_no_area()) {
 		return;
 	}
 
@@ -2679,24 +2691,55 @@ void Image::blend_rect_mask(const Ref<Image> &p_src, const Ref<Image> &p_mask, c
 	}
 }
 
-void Image::fill(const Color &c) {
+// Repeats `p_pixel` `p_count` times in consecutive memory.
+// Results in the original pixel and `p_count - 1` subsequent copies of it.
+void Image::_repeat_pixel_over_subsequent_memory(uint8_t *p_pixel, int p_pixel_size, int p_count) {
+	int offset = 1;
+	for (int stride = 1; offset + stride <= p_count; stride *= 2) {
+		memcpy(p_pixel + offset * p_pixel_size, p_pixel, stride * p_pixel_size);
+		offset += stride;
+	}
+	if (offset < p_count) {
+		memcpy(p_pixel + offset * p_pixel_size, p_pixel, (p_count - offset) * p_pixel_size);
+	}
+}
+
+void Image::fill(const Color &p_color) {
 	ERR_FAIL_COND_MSG(!_can_modify(format), "Cannot fill in compressed or custom image formats.");
 
-	uint8_t *wp = data.ptrw();
-	uint8_t *dst_data_ptr = wp;
+	uint8_t *dst_data_ptr = data.ptrw();
 
 	int pixel_size = get_format_pixel_size(format);
 
-	// put first pixel with the format-aware API
-	set_pixel(0, 0, c);
+	// Put first pixel with the format-aware API.
+	_set_color_at_ofs(dst_data_ptr, 0, p_color);
 
-	for (int y = 0; y < height; y++) {
-		for (int x = 0; x < width; x++) {
-			uint8_t *dst = &dst_data_ptr[(y * width + x) * pixel_size];
+	_repeat_pixel_over_subsequent_memory(dst_data_ptr, pixel_size, width * height);
+}
 
-			for (int k = 0; k < pixel_size; k++) {
-				dst[k] = dst_data_ptr[k];
-			}
+void Image::fill_rect(const Rect2 &p_rect, const Color &p_color) {
+	ERR_FAIL_COND_MSG(!_can_modify(format), "Cannot fill rect in compressed or custom image formats.");
+
+	Rect2i r = Rect2i(0, 0, width, height).intersection(p_rect.abs());
+	if (r.has_no_area()) {
+		return;
+	}
+
+	uint8_t *dst_data_ptr = data.ptrw();
+
+	int pixel_size = get_format_pixel_size(format);
+
+	// Put first pixel with the format-aware API.
+	uint8_t *rect_first_pixel_ptr = &dst_data_ptr[(r.position.y * width + r.position.x) * pixel_size];
+	_set_color_at_ofs(rect_first_pixel_ptr, 0, p_color);
+
+	if (r.size.x == width) {
+		// No need to fill rows separately.
+		_repeat_pixel_over_subsequent_memory(rect_first_pixel_ptr, pixel_size, width * r.size.y);
+	} else {
+		_repeat_pixel_over_subsequent_memory(rect_first_pixel_ptr, pixel_size, r.size.x);
+		for (int y = 1; y < r.size.y; y++) {
+			memcpy(rect_first_pixel_ptr + y * width * pixel_size, rect_first_pixel_ptr, r.size.x * pixel_size);
 		}
 	}
 }
@@ -2718,10 +2761,11 @@ void (*Image::_image_decompress_bptc)(Image *) = nullptr;
 void (*Image::_image_decompress_etc1)(Image *) = nullptr;
 void (*Image::_image_decompress_etc2)(Image *) = nullptr;
 
-Vector<uint8_t> (*Image::lossy_packer)(const Ref<Image> &, float) = nullptr;
-Ref<Image> (*Image::lossy_unpacker)(const Vector<uint8_t> &) = nullptr;
-Vector<uint8_t> (*Image::lossless_packer)(const Ref<Image> &) = nullptr;
-Ref<Image> (*Image::lossless_unpacker)(const Vector<uint8_t> &) = nullptr;
+Vector<uint8_t> (*Image::webp_lossy_packer)(const Ref<Image> &, float) = nullptr;
+Vector<uint8_t> (*Image::webp_lossless_packer)(const Ref<Image> &) = nullptr;
+Ref<Image> (*Image::webp_unpacker)(const Vector<uint8_t> &) = nullptr;
+Vector<uint8_t> (*Image::png_packer)(const Ref<Image> &) = nullptr;
+Ref<Image> (*Image::png_unpacker)(const Vector<uint8_t> &) = nullptr;
 Vector<uint8_t> (*Image::basis_universal_packer)(const Ref<Image> &, Image::UsedChannels) = nullptr;
 Ref<Image> (*Image::basis_universal_unpacker)(const Vector<uint8_t> &) = nullptr;
 
@@ -2985,6 +3029,8 @@ void Image::set_pixel(int p_x, int p_y, const Color &p_color) {
 }
 
 void Image::adjust_bcs(float p_brightness, float p_contrast, float p_saturation) {
+	ERR_FAIL_COND_MSG(!_can_modify(format), "Cannot adjust_bcs in compressed or custom image formats.");
+
 	uint8_t *w = data.ptrw();
 	uint32_t pixel_size = get_format_pixel_size(format);
 	uint32_t pixel_count = data.size() / pixel_size;
@@ -3139,6 +3185,7 @@ void Image::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("blend_rect", "src", "src_rect", "dst"), &Image::blend_rect);
 	ClassDB::bind_method(D_METHOD("blend_rect_mask", "src", "mask", "src_rect", "dst"), &Image::blend_rect_mask);
 	ClassDB::bind_method(D_METHOD("fill", "color"), &Image::fill);
+	ClassDB::bind_method(D_METHOD("fill_rect", "rect", "color"), &Image::fill_rect);
 
 	ClassDB::bind_method(D_METHOD("get_used_rect"), &Image::get_used_rect);
 	ClassDB::bind_method(D_METHOD("get_rect", "rect"), &Image::get_rect);
@@ -3268,7 +3315,7 @@ Ref<Image> Image::rgbe_to_srgb() {
 	ERR_FAIL_COND_V(format != FORMAT_RGBE9995, Ref<Image>());
 
 	Ref<Image> new_image;
-	new_image.instance();
+	new_image.instantiate();
 	new_image->create(width, height, false, Image::FORMAT_RGB8);
 
 	for (int row = 0; row < height; row++) {
@@ -3298,7 +3345,7 @@ Ref<Image> Image::get_image_from_mipmap(int p_mipamp) const {
 	}
 
 	Ref<Image> image;
-	image.instance();
+	image.instantiate();
 	image->width = w;
 	image->height = h;
 	image->format = format;
@@ -3615,7 +3662,7 @@ Image::Image(const uint8_t *p_mem_png_jpg, int p_len) {
 
 Ref<Resource> Image::duplicate(bool p_subresources) const {
 	Ref<Image> copy;
-	copy.instance();
+	copy.instantiate();
 	copy->_copy_internals_from(*this);
 	return copy;
 }

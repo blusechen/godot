@@ -374,7 +374,7 @@ void ClusterBuilderRD::setup(Size2i p_screen_size, uint32_t p_max_elements, RID 
 	}
 }
 
-void ClusterBuilderRD::begin(const Transform &p_view_transform, const CameraMatrix &p_cam_projection, bool p_flip_y) {
+void ClusterBuilderRD::begin(const Transform3D &p_view_transform, const CameraMatrix &p_cam_projection, bool p_flip_y) {
 	view_xform = p_view_transform.affine_inverse();
 	projection = p_cam_projection;
 	z_near = projection.get_z_near();
@@ -460,14 +460,6 @@ void ClusterBuilderRD::bake_cluster() {
 				RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterRender::PushConstant));
 
 				uint32_t instances = 1;
-#if 0
-				for (uint32_t j = i+1; j < element_count; j++) {
-					if (elements[i].type!=elements[j].type) {
-						break;
-					}
-					instances++;
-				}
-#endif
 				RD::get_singleton()->draw_list_draw(draw_list, true, instances);
 				i += instances;
 			}

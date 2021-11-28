@@ -44,9 +44,9 @@ class CallableCustom;
 // is required. It is designed for the standard case (object and method)
 // but can be optimized or customized.
 
+// Enforce 16 bytes with `alignas` to avoid arch-specific alignment issues on x86 vs armv7.
 class Callable {
-	//needs to be max 16 bytes in 64 bits
-	StringName method;
+	alignas(8) StringName method;
 	union {
 		uint64_t object = 0;
 		CallableCustom *custom;
@@ -81,6 +81,7 @@ public:
 	_FORCE_INLINE_ bool is_standard() const {
 		return method != StringName();
 	}
+	bool is_valid() const;
 
 	Callable bind(const Variant **p_arguments, int p_argcount) const;
 	Callable unbind(int p_argcount) const;
@@ -138,8 +139,9 @@ public:
 // be put inside a Variant, but it is not
 // used by the engine itself.
 
+// Enforce 16 bytes with `alignas` to avoid arch-specific alignment issues on x86 vs armv7.
 class Signal {
-	StringName name;
+	alignas(8) StringName name;
 	ObjectID object;
 
 public:
@@ -157,7 +159,7 @@ public:
 	operator String() const;
 
 	Error emit(const Variant **p_arguments, int p_argcount) const;
-	Error connect(const Callable &p_callable, const Vector<Variant> &p_binds = Vector<Variant>(), uint32_t p_flags = 0);
+	Error connect(const Callable &p_callable, uint32_t p_flags = 0);
 	void disconnect(const Callable &p_callable);
 	bool is_connected(const Callable &p_callable) const;
 
